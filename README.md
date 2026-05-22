@@ -152,9 +152,10 @@ class PathaoCourierService
     */
     protected function getAccessToken(): string
     {
+        return Cache::remember('pathao_access_token', 432000, function () {
             $response = $this->issueToken();
             return $response['access_token'] ?? '';
-
+        });
     }
 
     protected function headers(): array
