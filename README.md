@@ -190,7 +190,8 @@ protected function getAccessToken(): string
             'grant_type'    => 'password',
             'username'      => $this->username,
             'password'      => $this->password,
-        ])->json();
+        ])->throw()
+          ->json();
     }
 
     /*
