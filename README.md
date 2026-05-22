@@ -150,13 +150,23 @@ class PathaoCourierService
     | Get Access Token (auto-cached)
     |--------------------------------------------------------------------------
     */
-    protected function getAccessToken(): string
-    {
-        return Cache::remember('pathao_access_token', 432000, function () {
-            $response = $this->issueToken();
-            return $response['access_token'] ?? '';
-        });
-    }
+protected function getAccessToken(): string
+{
+    $cacheKey = 'pathao_access_token_' . md5(
+        $this->clientId . '_' . $this->username
+    );
+
+    return Cache::remember($cacheKey, now()->addDays(5), function () {
+
+        $response = $this->issueToken();
+
+        if (!isset($response['access_token'])) {
+            throw new \Exception('Pathao token generation failed');
+        }
+
+        return $response['access_token'];
+    });
+}
 
     protected function headers(): array
     {
