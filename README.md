@@ -745,3 +745,119 @@ $pathao = PathaoCourierService::withConfig(
 | `1`  | Document    |
 | `2`  | Parcel      |
 
+
+---
+
+## 🔔 Webhook Integration
+
+Receive real-time order status updates from Pathao when a consignment changes state (e.g. `Picked`, `In_Transit`, `Delivered`).
+
+### 1. Add webhook secret to `.env`
+
+```env
+PATHAO_WEBHOOK_SECRET=your-webhook-secret-here
+```
+
+### 2. Add to `config/pathao.php`
+
+```php
+'webhook_secret' => env('PATHAO_WEBHOOK_SECRET'),
+```
+
+### 3. Register the route
+
+Add to `routes/web.php` 
+
+```php
+use App\Http\Controllers\PathaoWebhookController;
+
+Route::post('/pathao/webhook', [PathaoWebhookController::class, 'handle']);
+```
+
+### 5. Exclude the route from CSRF verification
+
+Pathao sends POST requests from outside your app, so this route must bypass CSRF.
+
+**Laravel 11+** — open `bootstrap/app.php`:
+
+```php
+->withMiddleware(function ($middleware) {
+    $middleware->validateCsrfTokens(except: [
+        'pathao/webhook',
+    ]);
+})
+```
+
+**Laravel 10 or older** — open `app/Http/Middleware/VerifyCsrfToken.php`:
+
+```php
+protected $except = [
+    'pathao/webhook',
+];
+```
+
+### 4. Create the webhook controller
+
+Create `app/Http/Controllers/PathaoWebhookController.php`:
+
+```php
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Symfony\Component\HttpFoundation\Response;
+
+class PathaoWebhookController extends Controller
+{
+    public function handle(Request $request)
+    {
+        $secret    = config('pathao.webhook_secret');
+        $signature = $request->header('x-pathao-signature');
+
+        if (!$secret || !$signature) {
+            return response()->json(['error' => 'Unauthorized'], Response::HTTP_UNAUTHORIZED);
+        }
+
+        if ($secret != $signature) {
+            Log::warning('Pathao webhook: invalid signature');
+            return response()->json(['error' => 'Invalid signature'], Response::HTTP_FORBIDDEN);
+        }
+
+        $payload = $request->all();
+
+        Log::info('Pathao webhook received', $payload);
+
+        // TODO: Update your order by consignment_id / merchant_order_id
+
+       return response()->json(
+            ['success' => true],
+            202,
+            [
+                'X-Pathao-Merchant-Webhook-Integration-Secret' => 'f3992ecc-59da-4cbe-a049-a13da2018d51', // Pathao Merchant Dashboard এর Webhook Integration section থেকে এই secret token পাওয়া যাবে
+            ]
+        );
+    }
+}
+```
+
+
+
+### 6. Configure in Pathao Merchant Portal
+
+1. Log in to [Pathao Merchant Panel](https://merchant.pathao.com/courier/developer-api).
+2. Go to **Developer API** → **Webhook Integration**.
+3. Set:
+
+
+| Field            | Value                                                                                                                              |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **Callback URL** | `https://yourdomain.com/pathao/webhook`                                                                                            |
+| **Secret**       | You create this secret yourself, set the same value in `.env` as `PATHAO_WEBHOOK_SECRET` and in the Pathao portal webhook settings |
+
+
+1. Click **Update webhook** to save.
+
+> **Note:** Use the exact same secret in both places. Pathao sends it back in the `x-pathao-signature` request header on each webhook call.
+
